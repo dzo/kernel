@@ -374,17 +374,19 @@ static int bravo_ts_power(int on)
 	return 0;
 }
 
-static struct synaptics_i2c_rmi_platform_data bravo_synaptics_ts_data[] = {
+static struct synaptics_i2c_rmi_platform_data bravo_ts_data[] = {
 	{
-		.version = 0x100,
+		.version = 0x0100,
 		.power = bravo_ts_power,
-		.flags = SYNAPTICS_FLIP_Y | SYNAPTICS_SNAP_TO_INACTIVE_EDGE,
+		.sensitivity_adjust = 12,
+		.flags = SYNAPTICS_FLIP_Y  | SYNAPTICS_SNAP_TO_INACTIVE_EDGE,
 		.inactive_left = -1 * 0x10000 / 480,
 		.inactive_right = -1 * 0x10000 / 480,
 		.inactive_top = -5 * 0x10000 / 800,
 		.inactive_bottom = -5 * 0x10000 / 800,
-		.sensitivity_adjust = 12,
-	}
+		.dup_threshold = 10,
+		.margin_inactive_pixel = {8, 32, 32, 8},
+	},
 };
 
 static struct akm8973_platform_data compass_platform_data = {
@@ -490,7 +492,7 @@ static struct tpa2018d1_platform_data tpa2018_data = {
 static struct i2c_board_info base_i2c_devices[] = {
 	{
 		I2C_BOARD_INFO(SYNAPTICS_I2C_RMI_NAME, 0x40),
-		.platform_data = bravo_synaptics_ts_data,
+		.platform_data = &bravo_ts_data,
 		.irq = MSM_GPIO_TO_INT(BRAVO_GPIO_TP_INT_N)
 	},
 	{
