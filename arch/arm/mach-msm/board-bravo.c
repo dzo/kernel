@@ -691,7 +691,7 @@ static uint32_t flashlight_gpio_table_rev_CX[] = {
 						GPIO_NO_PULL, GPIO_2MA),
 };
 
-static int config_bravo_flashlight_gpios(void)
+static void config_bravo_flashlight_gpios(void)
 {
 	if (is_cdma_version(system_rev)) {
 		config_gpio_table(flashlight_gpio_table_rev_CX,
@@ -700,7 +700,7 @@ static int config_bravo_flashlight_gpios(void)
 		config_gpio_table(flashlight_gpio_table,
 				ARRAY_SIZE(flashlight_gpio_table));
 	}
-	return 0;
+	return;
 }
 
 static struct flashlight_platform_data bravo_flashlight_data = {
