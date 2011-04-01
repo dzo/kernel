@@ -251,6 +251,10 @@ config HTC_PWRSINK
 	default y
 	bool "HTC Power Sink Driver"
 
+config HTC_POWER_COLLAPSE_MAGIC
+        default n
+        bool "Check Power Collapse State"
+
 config CACHE_FLUSH_RANGE_LIMIT
 	hex "Cache flush range limit"
 	default 0x40000
@@ -559,5 +563,11 @@ config VIRTUAL_KPANIC_SRC
 	default "cache"
 	help
 	  Sets the partition to steal from to make the virtual one.
-	
+
+config HTC_OFFMODE_ALARM
+        bool "Enables HTC offmode alarm."
+        default n
+        help
+                support HTC offmode alarm.
+
 endif
