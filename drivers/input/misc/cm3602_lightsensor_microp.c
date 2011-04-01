@@ -149,8 +149,8 @@ static int get_ls_adc_level(uint8_t *data)
 					break;
 			}
 		}
-		printk(KERN_DEBUG "ALS value: 0x%X, level: %d #\n",
-				adc_value, adc_level);
+		/* printk(KERN_DEBUG "ALS value: 0x%X, level: %d #\n",
+				adc_value, adc_level); */
 		data[2] = adc_level;
 	}
 
