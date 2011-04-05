@@ -51,11 +51,11 @@ static struct q6_hw_info q6_audio_hw[Q6_HW_COUNT] = {
 		.max_gain = 400,
 	},
 	[Q6_HW_BT_SCO] = {
-		.min_gain = -1600,
+		.min_gain = -2000,
 		.max_gain = 400,
 	},
 	[Q6_HW_BT_A2DP] = {
-		.min_gain = -1600,
+		.min_gain = -2000,
 		.max_gain = 400,
 	},
 };
