@@ -40,6 +40,9 @@
 
 extern int is_ac_power_supplied(void);
 
+static int enable_charge=1;
+module_param(enable_charge, int, S_IRUGO | S_IWUSR | S_IWGRP);
+
 struct battery_status {
 	int timestamp;
 
@@ -153,6 +156,8 @@ struct ds2784_device_info {
 	ktime_t last_poll;
 	ktime_t last_charge_seen;
 };
+
+struct ds2784_device_info *the_di;
 
 #define psy_to_dev_info(x) container_of((x), struct ds2784_device_info, bat)
 
@@ -442,6 +447,9 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 	 */
 	charge_mode = source;
 
+	if(!enable_charge)
+		charge_mode = CHARGE_OFF;
+
 	/* shut off charger when full:
 	 * - CHGTF flag is set
 	 * - battery drawing less than 80mA
@@ -456,7 +464,7 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 	if (di->status.percentage < 99)  {
 		di->status.battery_full = 0;
 	}
-	if ((di->status.status_reg & 0x80) &&
+	if (enable_charge && (di->status.status_reg & 0x80) &&
 	((di->status.current_avg_uA/1000) <= 40) &&
 	(di->status.percentage == 100)) {	
 		di->status.battery_full = 1;
@@ -647,6 +655,7 @@ static int ds2784_battery_probe(struct platform_device *pdev)
 	di = kzalloc(sizeof(*di), GFP_KERNEL);
 	if (!di)
 		return -ENOMEM;
+	the_di = di;
 
 	platform_set_drvdata(pdev, di);
 
@@ -761,6 +770,19 @@ static int __init ds2784_battery_init(void)
 	wake_lock_init(&vbus_wake_lock, WAKE_LOCK_SUSPEND, "vbus_present");
 	return platform_driver_register(&ds2784_battery_driver);
 }
+
+static int set_charging(const char *val, struct kernel_param *kp) {
+	battery_adjust_charge_state(the_di);
+        return 0;
+}
+
+int get_battery(char *buffer, struct kernel_param *kp) {
+	struct battery_status *s=&(the_di->status);
+	ds2784_battery_read_status(the_di);
+        return sprintf(buffer,"V=%d I=%d Iav=%d C=%d",s->voltage_uV, s->current_uA, s->current_avg_uA, s->charge_uAh);
+}
+
+module_param_call(battery, set_charging, get_battery, NULL, S_IWUSR | S_IRUSR);
 
 module_init(ds2784_battery_init);
 
