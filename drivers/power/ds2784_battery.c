@@ -452,13 +452,13 @@ static int battery_adjust_charge_state(struct ds2784_device_info *di)
 
 	/* shut off charger when full:
 	 * - CHGTF flag is set
-	 * - battery drawing less than 80mA
+	 * - battery drawing less than 40mA average
 	 * - battery at 100% capacity
 	 *
 	 * We don't move from full to not-full until
-	 * we drop below 95%, to avoid confusing the
+	 * we drop below 99%, to avoid confusing the
 	 * user while we're maintaining a full charge
-	 * (slowly draining to 95 and charging back
+	 * (slowly draining to 99 and charging back
 	 * to 100)
 	 */
 	if (di->status.percentage < 99)  {
