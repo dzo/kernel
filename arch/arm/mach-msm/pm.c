@@ -303,6 +303,9 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		printk(KERN_INFO "msm_sleep(): mode %d delay %u idle %d\n",
 		       sleep_mode, sleep_delay, from_idle);
 
+	if(avs_enabled() && !from_idle)
+		avs_set_default_vdds();
+
 #ifndef CONFIG_ARCH_MSM_SCORPION
 	switch (sleep_mode) {
 	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE:

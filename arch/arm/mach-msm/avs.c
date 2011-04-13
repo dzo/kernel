@@ -32,14 +32,20 @@
 
 struct mutex avs_lock;
 
-static int debug=1;
-module_param(debug, int, S_IRUGO | S_IWUSR | S_IWGRP);
+static int debug=0;
+module_param(debug, int, 00644);
 
-static int enabled=0;
+static int enabled=1;
 
 int avs_enabled(void) {
 	return enabled;
 }
+
+static int vdd_max=VOLTAGE_MAX;
+module_param(vdd_max, int, 00644);
+
+static int vdd_min=VOLTAGE_MIN;
+module_param(vdd_min, int, 00644);
 
 static struct avs_state_s
 {
@@ -52,12 +58,15 @@ static struct avs_state_s
 				 */
 	int (*set_vdd) (int);	/* Function Ptr for setting voltage */
 	int changing;		/* Clock frequency is changing */
-	u32 freq_idx;		/* Current frequency index */
-	int vdd;		/* Current ACPU voltage */
+	u32 freq_idx;           /* Current frequency index */
+	int vdd;                /* Current ACPU voltage */
+	int current_tempr;	/* Current Temperature */
+	short *default_vdd;	/* Default Voltages */
 } avs_state;
 
+
 static int vdd_index;
-module_param(vdd_index,int,S_IRUGO | S_IWUSR | S_IWGRP);
+module_param(vdd_index,int,00644);
 
 static int vdd_value;
 static int set_vdd(const char *val, struct kernel_param *kp) {
@@ -79,8 +88,21 @@ int get_vdd(char *buffer, struct kernel_param *kp) {
 	return c;
 }
 
-module_param_call(vdd, set_vdd, get_vdd, &vdd_value, S_IRUGO | S_IWUSR | S_IWGRP);
+module_param_call(vdd, set_vdd, get_vdd, &vdd_value, 00644);
 
+int get_status(char *buffer, struct kernel_param *kp) {
+        int i;
+        int c=0;
+
+	c+=sprintf(buffer+c,"Current TEMPR=%d\nCurrent Index=%d\nCurrent Vdd=%d\nVdd Table:\n",
+		avs_state.current_tempr,avs_state.freq_idx,avs_state.vdd);
+
+        for(i=0;i<avs_state.freq_cnt;i++) {
+                c+=sprintf(buffer+c,"%2d: %d\n",i,avs_state.avs_v[avs_state.current_tempr*avs_state.freq_cnt+i]);
+        }
+        return c;
+}
+module_param_call(status, NULL, get_status, NULL, 00644);
 /*
  *  Update the AVS voltage vs frequency table, for current temperature
  *  Adjust based on the AVS delay circuit hardware status
@@ -121,18 +143,18 @@ static void avs_update_voltage_table(short *vdd_table)
 		AVSDEBUG("cpu=%d l2=%d vu=%d\n", cpu, l2, vu);
 		AVSDEBUG("Voltage up at %d\n", cur_freq_idx);
 
-		if (cur_voltage >= VOLTAGE_MAX)
+		if (cur_voltage >= vdd_max)
 			printk(KERN_ERR
 				"AVS: Voltage can not get high enough!\n");
 
 		/* Raise the voltage for all frequencies */
 		for (i = 0; i < avs_state.freq_cnt; i++) {
 			vdd_table[i] = cur_voltage + VOLTAGE_STEP;
-			if (vdd_table[i] > VOLTAGE_MAX)
-				vdd_table[i] = VOLTAGE_MAX;
+			if (vdd_table[i] > vdd_max)
+				vdd_table[i] = vdd_max;
 		}
 	} else if ((cpu == 1) && (l2 == 1) && (vu == 1)) {
-		if ((cur_voltage - VOLTAGE_STEP >= VOLTAGE_MIN) &&
+		if ((cur_voltage - VOLTAGE_STEP >= vdd_min) &&
 		    (cur_voltage <= vdd_table[cur_freq_idx])) {
 			vdd_table[cur_freq_idx] = cur_voltage - VOLTAGE_STEP;
 			AVSDEBUG("Voltage down for %d and lower levels\n",
@@ -151,7 +173,6 @@ static void avs_update_voltage_table(short *vdd_table)
  * Return the voltage for the target performance freq_idx and optionally
  * use AVS hardware to check the present voltage freq_idx
  */
-static int last_tmpr=-1;
 static short avs_get_target_voltage(int freq_idx, bool update_table)
 {
 	unsigned cur_tempr = GET_TEMPR();
@@ -160,8 +181,8 @@ static short avs_get_target_voltage(int freq_idx, bool update_table)
 	/* Table of voltages vs frequencies for this temp */
 	short *vdd_table = avs_state.avs_v + temp_index;
 
-	if(last_tmpr!=cur_tempr) { // only print tempr if it changes.
-		last_tmpr=cur_tempr;
+	if(avs_state.current_tempr!=cur_tempr) { // only print tempr if it changes.
+		avs_state.current_tempr=cur_tempr;
 		AVSDEBUG("TEMPR=%d\n",cur_tempr);
 	}
 
@@ -293,6 +314,13 @@ void avs_enable(int i) {
 	}
 }
 
+void avs_set_default_vdds(void) {
+	int i,j;
+	for (i = 0; i < TEMPRS; i++)
+		for(j=0;j<avs_state.freq_cnt; j++)
+			avs_state.avs_v[i*avs_state.freq_cnt+j] = avs_state.default_vdd[j];
+}
+
 static int set_avs(const char *val, struct kernel_param *kp)
 {
 	int hr;
@@ -302,11 +330,11 @@ static int set_avs(const char *val, struct kernel_param *kp)
 	return 0;
 }
 
-module_param_call(enabled, set_avs, param_get_int, &enabled, S_IRUGO | S_IWUSR | S_IWGRP);
+module_param_call(enabled, set_avs, param_get_int, &enabled, 00644);
 
 int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table)
 {
-	int i,j;
+	int j;
 
 	mutex_init(&avs_lock);
 
@@ -321,23 +349,24 @@ int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table)
 	avs_state.avs_v = kmalloc(TEMPRS * avs_state.freq_cnt *
 		sizeof(avs_state.avs_v[0]), GFP_KERNEL);
 
+	avs_state.default_vdd =  kmalloc(avs_state.freq_cnt * sizeof(avs_state.default_vdd[0]), GFP_KERNEL);
+
+	for(j=0;j<avs_state.freq_cnt; j++)
+		avs_state.default_vdd[j]=vdd_table[j];
+
 	if (avs_state.avs_v == 0)
 		return -ENOMEM;
 
-	for (i = 0; i < TEMPRS; i++)
-		for(j=0;j<avs_state.freq_cnt; j++)
-			avs_state.avs_v[i*avs_state.freq_cnt+j] = vdd_table[j];
-
-//	avs_reset_delays(AVSDSCR_INPUT);
-//	avs_set_tscsr(TSCSR_INPUT);
+	avs_set_default_vdds();
 
 	avs_state.set_vdd = set_vdd;
 	avs_state.changing = 0;
 	avs_state.freq_idx = -1;
 	avs_state.vdd = -1;
-//	avs_adjust_freq(freq_idx, 0);
+	avs_state.current_tempr = 0;
 
-//	avs_work_init();
+	if(enabled)
+		avs_enable(enabled);
 
 	return 0;
 }

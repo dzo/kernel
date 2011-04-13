@@ -30,7 +30,7 @@
 #ifndef AVS_H
 #define AVS_H
 
-#define VOLTAGE_MIN  850 /* mV */
+#define VOLTAGE_MIN  900 /* mV */
 #define VOLTAGE_MAX  1300
 #define VOLTAGE_STEP 25
 
@@ -53,6 +53,7 @@ void avs_set_tscsr(u32 to_tscsr);
 void avs_disable(void);
 int avs_enabled(void);
 void avs_enable(int i);
+void avs_set_default_vdds(void);
 
 #define AVSDEBUG(x...) if(debug) pr_info("AVS: " x);
 //#define AVSDEBUG(...)
