@@ -1118,7 +1118,7 @@ static struct msm_acpu_clock_platform_data bravo_cdma_clock_data = {
 
 #ifdef CONFIG_PERFLOCK
 static unsigned bravo_perf_acpu_table[] = {
-	245000000,
+	192000000,
 	576000000,
 	998400000,
 };
