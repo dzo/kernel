@@ -62,6 +62,7 @@ static struct avs_state_s
 	int vdd;                /* Current ACPU voltage */
 	int current_tempr;	/* Current Temperature */
 	short *default_vdd;	/* Default Voltages */
+	int *freq;		/* Frequencies */
 } avs_state;
 
 
@@ -98,7 +99,7 @@ int get_status(char *buffer, struct kernel_param *kp) {
 		avs_state.current_tempr,avs_state.freq_idx,avs_state.vdd);
 
         for(i=0;i<avs_state.freq_cnt;i++) {
-                c+=sprintf(buffer+c,"%2d: %d\n",i,avs_state.avs_v[avs_state.current_tempr*avs_state.freq_cnt+i]);
+                c+=sprintf(buffer+c,"%2d:%7d %d\n",i,avs_state.freq[i],avs_state.avs_v[avs_state.current_tempr*avs_state.freq_cnt+i]);
         }
         return c;
 }
@@ -119,6 +120,10 @@ static void avs_update_voltage_table(short *vdd_table)
 
 	cur_freq_idx = avs_state.freq_idx;
 	cur_voltage = avs_state.vdd;
+
+	// don't update the MPLL based entry
+	if(avs_state.freq[avs_state.freq_idx]==245000)
+		return;
 
 	avscsr = avs_test_delays();
 	if(avscsr)
@@ -332,7 +337,7 @@ static int set_avs(const char *val, struct kernel_param *kp)
 
 module_param_call(enabled, set_avs, param_get_int, &enabled, 00644);
 
-int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table)
+int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table, int *freq_table)
 {
 	int j;
 
@@ -350,9 +355,12 @@ int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table)
 		sizeof(avs_state.avs_v[0]), GFP_KERNEL);
 
 	avs_state.default_vdd =  kmalloc(avs_state.freq_cnt * sizeof(avs_state.default_vdd[0]), GFP_KERNEL);
+	avs_state.freq =  kmalloc(avs_state.freq_cnt * sizeof(avs_state.freq[0]), GFP_KERNEL);
 
-	for(j=0;j<avs_state.freq_cnt; j++)
+	for(j=0;j<avs_state.freq_cnt; j++) {
 		avs_state.default_vdd[j]=vdd_table[j];
+		avs_state.freq[j]=freq_table[j];
+	}
 
 	if (avs_state.avs_v == 0)
 		return -ENOMEM;

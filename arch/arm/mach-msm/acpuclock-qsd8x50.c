@@ -74,7 +74,9 @@ struct clkctl_acpu_speed {
 
 struct clkctl_acpu_speed acpu_freq_tbl[] = {
         {  19200, CCTL(CLK_TCXO, 1),            SRC_RAW, 0, 0, 975, 14000 },
+	{  76800, CCTL(CLK_TCXO, 1),            SRC_SCPLL, 0x02, 0, 900, 58000 },
         { 128000, CCTL(CLK_TCXO, 1),            SRC_AXI, 0, 0, 975, 14000 },
+	{ 192000, CCTL(CLK_TCXO, 1),            SRC_SCPLL, 0x05, 0, 1000, 58000 },
         { 245000, CCTL(CLK_MODEM_PLL, 1),       SRC_RAW, 0, 0, 1000, 29000 },
         /* Work arround for acpu resume hung, GPLL is turn off by arm9 */
         /*{ 256000, CCTL(CLK_GLOBAL_PLL, 3),      SRC_RAW, 0, 0, 1000, 29000 },*/
@@ -106,11 +108,11 @@ struct clkctl_acpu_speed acpu_freq_tbl[] = {
  *
  * Currently: MPLL
  */
-struct clkctl_acpu_speed *acpu_stby = &acpu_freq_tbl[2];
+struct clkctl_acpu_speed *acpu_stby = &acpu_freq_tbl[4];
 #define IS_ACPU_STANDBY(x)	(((x)->clk_cfg == acpu_stby->clk_cfg) && \
 				 ((x)->clk_sel == acpu_stby->clk_sel))
 
-struct clkctl_acpu_speed *acpu_mpll = &acpu_freq_tbl[2];
+struct clkctl_acpu_speed *acpu_mpll = &acpu_freq_tbl[4];
 
 #ifdef CONFIG_CPU_FREQ_TABLE
 static struct cpufreq_frequency_table freq_table[ARRAY_SIZE(acpu_freq_tbl)];
@@ -128,6 +130,7 @@ static void __init acpuclk_init_cpufreq_table(void)
 		if (/* acpu_freq_tbl[i].acpu_khz == 256000 || */
 				acpu_freq_tbl[i].acpu_khz == 19200 ||
 				acpu_freq_tbl[i].acpu_khz == 128000 ||
+				acpu_freq_tbl[i].acpu_khz == 245000 ||
 				acpu_freq_tbl[i].acpu_khz == 256000)
 			continue;
 
@@ -210,8 +213,8 @@ static void scpll_set_freq(uint32_t lval)
 
 	if (lval > 33)
 		lval = 33;
-	if (lval < 10)
-		lval = 10;
+	if (lval < 2)
+		lval = 2;
 
 	/* wait for any calibrations or frequency switches to finish */
 	while (readl(SCPLL_STATUS_ADDR) & 0x3)
@@ -507,7 +510,7 @@ int acpuclk_get_index(void)
 uint32_t acpuclk_get_switch_time(void)
 {
 	// switch time may include a voltage switch so add these times together
-	return drv_state.acpu_switch_time_us+drv_state.vdd_switch_time_us;
+	return drv_state.acpu_switch_time_us; //+drv_state.vdd_switch_time_us;
 }
 
 unsigned long acpuclk_power_collapse(int from_idle)
@@ -538,15 +541,17 @@ static int __init acpu_avs_init(int (*set_vdd) (int), int khz)
         int freq_count = 0;
         int freq_index = -1;
 	short vdd_table[ARRAY_SIZE(acpu_freq_tbl)];
+	int freq_table[ARRAY_SIZE(acpu_freq_tbl)];
 
         for (i = 0; acpu_freq_tbl[i].acpu_khz; i++) {
 		vdd_table[i]=acpu_freq_tbl[i].vdd;
+		freq_table[i]=acpu_freq_tbl[i].acpu_khz;
                 freq_count++;
                 if (acpu_freq_tbl[i].acpu_khz == khz)
                         freq_index = i;
         }
 
-        return avs_init(set_vdd, freq_count, freq_index, vdd_table);
+        return avs_init(set_vdd, freq_count, freq_index, vdd_table, freq_table);
 }
 
 void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)

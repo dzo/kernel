@@ -37,7 +37,7 @@
 #define AVSDSCR_INPUT 0x01004860 /* magic # from circuit designer */
 #define TSCSR_INPUT   0x00000001 /* enable temperature sense */
 
-int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table);
+int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table, int *freq_table);
 void avs_exit(void);
 
 int avs_adjust_freq(u32 freq_index, int begin);
