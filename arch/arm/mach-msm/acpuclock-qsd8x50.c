@@ -74,9 +74,9 @@ struct clkctl_acpu_speed {
 
 struct clkctl_acpu_speed acpu_freq_tbl[] = {
         {  19200, CCTL(CLK_TCXO, 1),            SRC_RAW, 0, 0, 975, 14000 },
-	{  76800, CCTL(CLK_TCXO, 1),            SRC_SCPLL, 0x02, 0, 900, 58000 },
+//	{  76800, CCTL(CLK_TCXO, 1),            SRC_SCPLL, 0x02, 0, 900, 58000 },
         { 128000, CCTL(CLK_TCXO, 1),            SRC_AXI, 0, 0, 975, 14000 },
-	{ 192000, CCTL(CLK_TCXO, 1),            SRC_SCPLL, 0x05, 0, 1000, 58000 },
+//	{ 192000, CCTL(CLK_TCXO, 1),            SRC_SCPLL, 0x05, 0, 1000, 58000 },
         { 245000, CCTL(CLK_MODEM_PLL, 1),       SRC_RAW, 0, 0, 1000, 29000 },
         /* Work arround for acpu resume hung, GPLL is turn off by arm9 */
         /*{ 256000, CCTL(CLK_GLOBAL_PLL, 3),      SRC_RAW, 0, 0, 1000, 29000 },*/
@@ -108,11 +108,11 @@ struct clkctl_acpu_speed acpu_freq_tbl[] = {
  *
  * Currently: MPLL
  */
-struct clkctl_acpu_speed *acpu_stby = &acpu_freq_tbl[4];
+struct clkctl_acpu_speed *acpu_stby = &acpu_freq_tbl[2];
 #define IS_ACPU_STANDBY(x)	(((x)->clk_cfg == acpu_stby->clk_cfg) && \
 				 ((x)->clk_sel == acpu_stby->clk_sel))
 
-struct clkctl_acpu_speed *acpu_mpll = &acpu_freq_tbl[4];
+struct clkctl_acpu_speed *acpu_mpll = &acpu_freq_tbl[2];
 
 #ifdef CONFIG_CPU_FREQ_TABLE
 static struct cpufreq_frequency_table freq_table[ARRAY_SIZE(acpu_freq_tbl)];
@@ -130,7 +130,7 @@ static void __init acpuclk_init_cpufreq_table(void)
 		if (/* acpu_freq_tbl[i].acpu_khz == 256000 || */
 				acpu_freq_tbl[i].acpu_khz == 19200 ||
 				acpu_freq_tbl[i].acpu_khz == 128000 ||
-				acpu_freq_tbl[i].acpu_khz == 245000 ||
+//				acpu_freq_tbl[i].acpu_khz == 245000 ||
 				acpu_freq_tbl[i].acpu_khz == 256000)
 			continue;
 

@@ -122,8 +122,8 @@ static void avs_update_voltage_table(short *vdd_table)
 	cur_voltage = avs_state.vdd;
 
 	// don't update the MPLL based entry
-	if(avs_state.freq[avs_state.freq_idx]==245000)
-		return;
+//	if(avs_state.freq[avs_state.freq_idx]==245000)
+//		return;
 
 	avscsr = avs_test_delays();
 	if(avscsr)
