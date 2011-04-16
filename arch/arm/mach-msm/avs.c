@@ -256,7 +256,7 @@ aaf_out:
 
 static struct delayed_work avs_work;
 static struct workqueue_struct  *kavs_wq;
-#define AVS_DELAY ((CONFIG_HZ * 50 + 999) / 1000)
+#define AVS_DELAY msecs_to_jiffies(50)
 
 static void do_avs_timer(struct work_struct *work)
 {
