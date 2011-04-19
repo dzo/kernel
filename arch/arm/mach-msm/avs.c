@@ -35,7 +35,7 @@ struct mutex avs_lock;
 static int debug=0;
 module_param(debug, int, 00644);
 
-static int enabled=1;
+static int enabled=0;
 
 int avs_enabled(void) {
 	return enabled;
@@ -120,10 +120,6 @@ static void avs_update_voltage_table(short *vdd_table)
 
 	cur_freq_idx = avs_state.freq_idx;
 	cur_voltage = avs_state.vdd;
-
-	// don't update the MPLL based entry
-	if(avs_state.freq[avs_state.freq_idx]==245000)
-		return;
 
 	avscsr = avs_test_delays();
 	if(avscsr)
