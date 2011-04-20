@@ -108,6 +108,11 @@ module_param_call(status, NULL, get_status, NULL, 00644);
  *  Update the AVS voltage vs frequency table, for current temperature
  *  Adjust based on the AVS delay circuit hardware status
  */
+
+static int cpu_av=0;
+static int l2_av=0;
+static int vu_av=0;
+
 static void avs_update_voltage_table(short *vdd_table)
 {
 	u32 avscsr;
@@ -122,12 +127,11 @@ static void avs_update_voltage_table(short *vdd_table)
 	cur_voltage = avs_state.vdd;
 
 	// don't update the MPLL based entry
-//	if(avs_state.freq[avs_state.freq_idx]==245000)
-//		return;
+	if(avs_state.freq[avs_state.freq_idx]==245760)
+		return;
 
 	avscsr = avs_test_delays();
-	if(avscsr)
-		AVSDEBUG("avscsr=%x, avsdscr=%x\n", avscsr, avs_get_avsdscr());
+	AVSDEBUG("avscsr=%x, avsdscr=%x\n", avscsr, avs_get_avsdscr());
 
 	/*
 	 * Read the results for the various unit's AVS delay circuits
@@ -158,7 +162,19 @@ static void avs_update_voltage_table(short *vdd_table)
 			if (vdd_table[i] > vdd_max)
 				vdd_table[i] = vdd_max;
 		}
-	} else if ((cpu == 1) && (l2 == 1) && (vu == 1)) {
+	} else {
+		// exponential averaging is used to decide if we need to lower 
+		// the voltage.
+		cpu_av=cpu_av/2;
+		l2_av=l2_av/2;
+		vu_av=vu_av/2;
+		if(cpu==1) cpu_av+=50;
+		if(l2==1) l2_av+=50;
+		if(vu==1) vu_av+=50;
+		AVSDEBUG("CPU=%d, L2=%d, VU=%d\n",cpu_av,l2_av,vu_av);
+
+		if ((cpu_av > 90) && (l2_av > 90) && (vu_av >90)) {
+		cpu_av=l2_av=vu_av=0;
 		if ((cur_voltage - VOLTAGE_STEP >= vdd_min) &&
 		    (cur_voltage <= vdd_table[cur_freq_idx])) {
 			vdd_table[cur_freq_idx] = cur_voltage - VOLTAGE_STEP;
@@ -170,6 +186,7 @@ static void avs_update_voltage_table(short *vdd_table)
 				if (vdd_table[i] > vdd_table[cur_freq_idx])
 					vdd_table[i] = vdd_table[cur_freq_idx];
 			}
+		}
 		}
 	}
 }
@@ -213,6 +230,7 @@ static int avs_set_target_voltage(int freq_idx, bool update_table)
 		if (rc)
 			return rc;
 		avs_state.vdd = new_voltage;
+		cpu_av=l2_av=vu_av=0;
 	}
 	return rc;
 }
