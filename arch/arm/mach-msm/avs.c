@@ -28,7 +28,6 @@
 #include "avs.h"
 
 #define TEMPRS 16                /* total number of temperature regions */
-#define GET_TEMPR() (avs_get_tscsr() >> 28) /* scale TSCSR[CTEMP] to regions */
 
 struct mutex avs_lock;
 
@@ -41,11 +40,26 @@ int avs_enabled(void) {
 	return enabled;
 }
 
+static int temp_min=0x50;
+module_param(temp_min, int, 00644);
+
+static int temp_max=0x7f;
+module_param(temp_max, int, 00644);
+
 static int vdd_max=VOLTAGE_MAX;
 module_param(vdd_max, int, 00644);
 
 static int vdd_min=VOLTAGE_MIN;
 module_param(vdd_min, int, 00644);
+
+enum {
+	AVS_UNKNOWN=0,
+	AVS_FOUND=1
+};
+
+// indexes of the modem and lowest scorpion pll frequencies
+#define MPLL_IDX 2
+#define SCPLL_IDX 3
 
 static struct avs_state_s
 {
@@ -62,6 +76,7 @@ static struct avs_state_s
 	int vdd;                /* Current ACPU voltage */
 	int current_tempr;	/* Current Temperature */
 	short *default_vdd;	/* Default Voltages */
+	char *flags;		/* flags for each avs_v */
 	int *freq;		/* Frequencies */
 } avs_state;
 
@@ -77,6 +92,30 @@ static int set_vdd(const char *val, struct kernel_param *kp) {
 		avs_state.avs_v[i*avs_state.freq_cnt+vdd_index]=vdd_value;
 	}
 	return 0;
+}
+
+void avs_set_default_vdds(void) {
+	int i,j;
+	for (i = 0; i < TEMPRS; i++)
+		for(j=0;j<avs_state.freq_cnt; j++) {
+			avs_state.avs_v[i*avs_state.freq_cnt+j] = avs_state.default_vdd[j];
+			avs_state.flags[i*avs_state.freq_cnt+j] = AVS_UNKNOWN;
+		}
+}
+
+static int get_temp(void) {
+
+	int t=avs_get_tscsr() >> 24;
+
+	if(t<temp_min) {
+		temp_min=t-7;
+		avs_set_default_vdds();
+	}
+	if(t>temp_max) {
+		temp_max=t+7;
+		avs_set_default_vdds();
+	}
+	return ((t-temp_min)*(TEMPRS-1))/(temp_max-temp_min); /* scale TSCSR[CTEMP] to regions */
 }
 
 int get_vdd(char *buffer, struct kernel_param *kp) {
@@ -109,10 +148,6 @@ module_param_call(status, NULL, get_status, NULL, 00644);
  *  Adjust based on the AVS delay circuit hardware status
  */
 
-static int cpu_av=0;
-static int l2_av=0;
-static int vu_av=0;
-
 static void avs_update_voltage_table(short *vdd_table)
 {
 	u32 avscsr;
@@ -127,11 +162,11 @@ static void avs_update_voltage_table(short *vdd_table)
 	cur_voltage = avs_state.vdd;
 
 	// don't update the MPLL based entry
-	if(avs_state.freq[avs_state.freq_idx]==245760)
+	if(cur_freq_idx==MPLL_IDX)
 		return;
 
 	avscsr = avs_test_delays();
-	AVSDEBUG("avscsr=%x, avsdscr=%x\n", avscsr, avs_get_avsdscr());
+	AVSDEBUG("avscsr=%x, avsdscr=%x avstscsr=%x\n", avscsr, avs_get_avsdscr(), avs_get_tscsr());
 
 	/*
 	 * Read the results for the various unit's AVS delay circuits
@@ -158,35 +193,37 @@ static void avs_update_voltage_table(short *vdd_table)
 
 		/* Raise the voltage for all frequencies */
 		for (i = 0; i < avs_state.freq_cnt; i++) {
-			vdd_table[i] = cur_voltage + VOLTAGE_STEP;
+			vdd_table[i] += VOLTAGE_STEP;
 			if (vdd_table[i] > vdd_max)
 				vdd_table[i] = vdd_max;
 		}
+
 	} else {
-		// exponential averaging is used to decide if we need to lower 
-		// the voltage.
-		cpu_av=cpu_av/2;
-		l2_av=l2_av/2;
-		vu_av=vu_av/2;
-		if(cpu==1) cpu_av+=50;
-		if(l2==1) l2_av+=50;
-		if(vu==1) vu_av+=50;
-		AVSDEBUG("CPU=%d, L2=%d, VU=%d\n",cpu_av,l2_av,vu_av);
-
-		if ((cpu_av > 90) && (l2_av > 90) && (vu_av >90)) {
-		cpu_av=l2_av=vu_av=0;
-		if ((cur_voltage - VOLTAGE_STEP >= vdd_min) &&
-		    (cur_voltage <= vdd_table[cur_freq_idx])) {
-			vdd_table[cur_freq_idx] = cur_voltage - VOLTAGE_STEP;
-			AVSDEBUG("Voltage down for %d and lower levels\n",
-				cur_freq_idx);
-
-			/* clamp to this voltage for all lower levels */
-			for (i = 0; i < cur_freq_idx; i++) {
-				if (vdd_table[i] > vdd_table[cur_freq_idx])
-					vdd_table[i] = vdd_table[cur_freq_idx];
+		// if a good voltaage has been found just return
+		if(avs_state.flags[avs_state.current_tempr*avs_state.freq_cnt+cur_freq_idx]==AVS_FOUND)
+			return;
+		// if all oscillators ask for down
+		if ((cpu == 1) && (l2 == 1) && (vu == 1)) {
+			if ((cur_voltage - VOLTAGE_STEP >= vdd_min) &&
+			    (cur_voltage <= vdd_table[cur_freq_idx])) {
+				vdd_table[cur_freq_idx] = cur_voltage - VOLTAGE_STEP;
+				AVSDEBUG("Voltage down for %d and lower levels\n",
+					cur_freq_idx);
+				/* clamp to this voltage for all lower levels */
+				for (i = 0; i < cur_freq_idx; i++) {
+					if (vdd_table[i] > vdd_table[cur_freq_idx])
+						vdd_table[i] = vdd_table[cur_freq_idx];
+				}
 			}
-		}
+		} else if ((cpu == 0) || (l2 == 0)) { // vu is not very reliable so only use cpu and l2 to see if a good voltage is found
+			// increase the voltage slightly and mark as found
+			avs_state.flags[avs_state.current_tempr*avs_state.freq_cnt+cur_freq_idx]=AVS_FOUND;
+			vdd_table[cur_freq_idx] += VOLTAGE_STEP;
+			if (vdd_table[cur_freq_idx] > avs_state.default_vdd[cur_freq_idx])
+				vdd_table[cur_freq_idx] = avs_state.default_vdd[cur_freq_idx];
+			if(cur_freq_idx==SCPLL_IDX) // use the lowest SCPLL frequency for the MPLL frequency
+				 vdd_table[MPLL_IDX]=vdd_table[cur_freq_idx];
+			AVSDEBUG("Fix Voltage to %d for %d\n",vdd_table[cur_freq_idx],cur_freq_idx); 
 		}
 	}
 }
@@ -197,7 +234,7 @@ static void avs_update_voltage_table(short *vdd_table)
  */
 static short avs_get_target_voltage(int freq_idx, bool update_table)
 {
-	unsigned cur_tempr = GET_TEMPR();
+	unsigned cur_tempr = get_temp();
 	unsigned temp_index = cur_tempr*avs_state.freq_cnt;
 
 	/* Table of voltages vs frequencies for this temp */
@@ -230,7 +267,6 @@ static int avs_set_target_voltage(int freq_idx, bool update_table)
 		if (rc)
 			return rc;
 		avs_state.vdd = new_voltage;
-		cpu_av=l2_av=vu_av=0;
 	}
 	return rc;
 }
@@ -337,12 +373,6 @@ void avs_enable(int i) {
 	}
 }
 
-void avs_set_default_vdds(void) {
-	int i,j;
-	for (i = 0; i < TEMPRS; i++)
-		for(j=0;j<avs_state.freq_cnt; j++)
-			avs_state.avs_v[i*avs_state.freq_cnt+j] = avs_state.default_vdd[j];
-}
 
 static int set_avs(const char *val, struct kernel_param *kp)
 {
@@ -373,6 +403,7 @@ int avs_init(int (*set_vdd)(int), u32 freq_cnt, u32 freq_idx, short *vdd_table, 
 		sizeof(avs_state.avs_v[0]), GFP_KERNEL);
 
 	avs_state.default_vdd =  kmalloc(avs_state.freq_cnt * sizeof(avs_state.default_vdd[0]), GFP_KERNEL);
+	avs_state.flags =  kmalloc(TEMPRS * avs_state.freq_cnt * sizeof(avs_state.flags[0]), GFP_KERNEL);
 	avs_state.freq =  kmalloc(avs_state.freq_cnt * sizeof(avs_state.freq[0]), GFP_KERNEL);
 
 	for(j=0;j<avs_state.freq_cnt; j++) {
