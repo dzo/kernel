@@ -259,11 +259,15 @@ static short avs_get_target_voltage(int freq_idx, bool update_table)
 static int avs_set_target_voltage(int freq_idx, bool update_table)
 {
 	int rc = 0;
+	int retries=10;
+
 	int new_voltage = avs_get_target_voltage(freq_idx, update_table);
 	if (avs_state.vdd != new_voltage) {
-		AVSDEBUG("AVS setting V to %d mV @%d\n",
-			new_voltage, freq_idx);
-		rc = avs_state.set_vdd(new_voltage);
+		do {
+			AVSDEBUG("AVS setting V to %d mV @%d\n",
+				new_voltage, freq_idx);
+			rc = avs_state.set_vdd(new_voltage);
+		} while(rc && retries--);
 		if (rc)
 			return rc;
 		avs_state.vdd = new_voltage;
