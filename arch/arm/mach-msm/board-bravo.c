@@ -953,6 +953,58 @@ static struct platform_device bravo_oj = {
 };
 #endif
 
+static void
+msm_i2c_gpio_config(int iface, int config_type)
+{
+        int gpio_scl;
+        int gpio_sda;
+        if (iface) {
+                gpio_scl = 60;
+                gpio_sda = 61;
+        } else {
+                gpio_scl = 95;
+                gpio_sda = 96;
+        }
+        if (config_type) {
+                gpio_tlmm_config(GPIO_CFG(gpio_scl, 1, GPIO_CFG_INPUT,
+                                        GPIO_CFG_NO_PULL, GPIO_CFG_16MA), GPIO_CFG_ENABLE);
+                gpio_tlmm_config(GPIO_CFG(gpio_sda, 1, GPIO_CFG_INPUT,
+                                        GPIO_CFG_NO_PULL, GPIO_CFG_16MA), GPIO_CFG_ENABLE);
+        } else {
+                gpio_tlmm_config(GPIO_CFG(gpio_scl, 0, GPIO_CFG_OUTPUT,
+                                        GPIO_CFG_NO_PULL, GPIO_CFG_16MA), GPIO_CFG_ENABLE);
+                gpio_tlmm_config(GPIO_CFG(gpio_sda, 0, GPIO_CFG_OUTPUT,
+                                        GPIO_CFG_NO_PULL, GPIO_CFG_16MA), GPIO_CFG_ENABLE);
+        }
+}
+
+static struct msm_i2c_platform_data msm_i2c_pdata = {
+        .clk_freq = 100000,
+        .rsl_id = 6,
+        .pri_clk = 95,
+        .pri_dat = 96,
+        .aux_clk = 60,
+        .aux_dat = 61,
+        .msm_i2c_config_gpio = msm_i2c_gpio_config,
+};
+
+static void __init msm_device_i2c_init(void)
+{
+        if (gpio_request(95, "i2c_pri_clk"))
+                pr_err("failed to request gpio i2c_pri_clk\n");
+        if (gpio_request(96, "i2c_pri_dat"))
+                pr_err("failed to request gpio i2c_pri_dat\n");
+        if (gpio_request(60, "i2c_sec_clk"))
+                pr_err("failed to request gpio i2c_sec_clk\n");
+        if (gpio_request(61, "i2c_sec_dat"))
+                pr_err("failed to request gpio i2c_sec_dat\n");
+
+        msm_i2c_pdata.rmutex = 1;
+        msm_i2c_pdata.pm_lat = 4594;
+
+        msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
+}
+
 static struct platform_device *devices[] __initdata = {
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart1,
@@ -1198,7 +1250,9 @@ static void __init bravo_init(void)
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 
+	msm_device_i2c_init();
 	platform_add_devices(devices, ARRAY_SIZE(devices));
+
 
 	i2c_register_board_info(0, base_i2c_devices,
 		ARRAY_SIZE(base_i2c_devices));

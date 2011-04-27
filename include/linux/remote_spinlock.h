@@ -79,4 +79,34 @@ typedef struct {
 		spin_unlock_irqrestore(&((lock)->local), flags); \
 	} while (0)
 
+typedef struct {
+        struct mutex local;
+        _remote_mutex_t remote;
+} remote_mutex_t;
+
+#define remote_mutex_init(lock, id) \
+        ({ \
+                mutex_init(&((lock)->local)); \
+                _remote_mutex_init(id, &((lock)->remote)); \
+        })
+#define remote_mutex_lock(lock) \
+        do { \
+                mutex_lock(&((lock)->local)); \
+                _remote_mutex_lock(&((lock)->remote)); \
+        } while (0)
+#define remote_mutex_trylock(lock) \
+        ({ \
+                mutex_trylock(&((lock)->local)) \
+                ? _remote_mutex_trylock(&((lock)->remote)) \
+                        ? 1 \
+                        : ({mutex_unlock(&((lock)->local)); 0; }) \
+                : 0; \
+        })
+#define remote_mutex_unlock(lock) \
+        do { \
+                _remote_mutex_unlock(&((lock)->remote)); \
+                mutex_unlock(&((lock)->local)); \
+        } while (0)
+
 #endif
+

@@ -78,6 +78,22 @@ struct msm_snd_endpoints {
 	unsigned num;
 };
 
+struct msm_i2c_platform_data {
+        int clk_freq;
+        uint32_t rmutex;
+        int rsl_id;
+        uint32_t pm_lat;
+        int pri_clk;
+        int pri_dat;
+        int aux_clk;
+        int aux_dat;
+        const char *clk;
+        const char *pclk;
+        int src_clk_rate;
+        int use_gsbi_shared_mode;
+        void (*msm_i2c_config_gpio)(int iface, int config_type);
+};
+
 struct clk;
 
 /* common init routines for use by arch/arm/mach-msm/board-*.c */

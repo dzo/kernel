@@ -36,32 +36,14 @@
 
 #include <linux/types.h>
 
-#if defined(CONFIG_ARCH_MSM7X30)
-#define SMEM_DAL_SPINLOCK_BASE 0x1000
-struct dek_spinlock {
-	volatile uint8_t self_lock;
-	volatile uint8_t other_lock;
-	volatile uint8_t next_yield;
-	uint8_t pad;
-};
-
-typedef union {
-	volatile uint32_t lock;
-	struct dek_spinlock dek;
-} raw_remote_spinlock_t;
-#else
 typedef struct {
 	volatile uint32_t lock;
 } raw_remote_spinlock_t;
-#endif
 
 typedef raw_remote_spinlock_t *_remote_spinlock_t;
 
-#if defined(CONFIG_ARCH_MSM7X30)
-#define remote_spin_lock_id_t const char *
-#else
 #define remote_spin_lock_id_t uint32_t
-#endif
+
 static inline void __raw_remote_ex_spin_lock(raw_remote_spinlock_t *lock)
 {
 	unsigned long tmp;
@@ -77,6 +59,25 @@ static inline void __raw_remote_ex_spin_lock(raw_remote_spinlock_t *lock)
 	: "cc");
 
 	smp_mb();
+}
+
+static inline int __raw_remote_ex_spin_trylock(raw_remote_spinlock_t *lock)
+{
+        unsigned long tmp;
+
+        __asm__ __volatile__(
+"       ldrex   %0, [%1]\n"
+"       teq     %0, #0\n"
+"       strexeq %0, %2, [%1]\n"
+        : "=&r" (tmp)
+        : "r" (&lock->lock), "r" (1)
+        : "cc");
+
+        if (tmp == 0) {
+                smp_mb();
+                return 1;
+        }
+        return 0;
 }
 
 static inline void __raw_remote_ex_spin_unlock(raw_remote_spinlock_t *lock)
@@ -121,16 +122,26 @@ int _remote_spin_lock_init(remote_spin_lock_id_t id, _remote_spinlock_t *lock);
 
 /* Only use SWP-based spinlocks for ARM11 apps processors where the LDREX/STREX
  * instructions are unable to lock shared memory for exclusive access. */
-#if defined(CONFIG_ARCH_MSM7X30)
-void _remote_spin_lock(_remote_spinlock_t *lock);
-void _remote_spin_unlock(_remote_spinlock_t *lock);
-#elif defined(CONFIG_ARCH_MSM_ARM11)
-#define _remote_spin_lock(lock)		__raw_remote_swp_spin_lock(*lock)
-#define _remote_spin_unlock(lock)	__raw_remote_swp_spin_unlock(*lock)
-#else
+
 #define _remote_spin_lock(lock)		__raw_remote_ex_spin_lock(*lock)
 #define _remote_spin_unlock(lock)	__raw_remote_ex_spin_unlock(*lock)
-#endif	/* CONFIG_ARCH_MSM_ARM11 */
+#define _remote_spin_trylock(lock)      __raw_remote_ex_spin_trylock(*lock)
+
+typedef struct {
+        _remote_spinlock_t      r_spinlock;
+        uint32_t                delay_us;
+} _remote_mutex_t;
+
+struct remote_mutex_id {
+        int			r_spinlock_id;
+        uint32_t                delay_us;
+};
+
+int _remote_mutex_init(struct remote_mutex_id *id, _remote_mutex_t *lock);
+void _remote_mutex_lock(_remote_mutex_t *lock);
+void _remote_mutex_unlock(_remote_mutex_t *lock);
+int _remote_mutex_trylock(_remote_mutex_t *lock);
+
 
 #endif /* __ASM__ARCH_QC_REMOTE_SPINLOCK_H */
 
