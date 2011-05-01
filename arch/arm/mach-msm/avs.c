@@ -40,7 +40,7 @@ int avs_enabled(void) {
 	return enabled;
 }
 
-static int temp_min=0x50;
+static int temp_min=0x40;
 module_param(temp_min, int, 00644);
 
 static int temp_max=0x7f;
@@ -58,8 +58,8 @@ enum {
 };
 
 // indexes of the modem and lowest scorpion pll frequencies
-#define MPLL_IDX 2
-#define SCPLL_IDX 3
+#define MPLL_IDX 1
+#define SCPLL_IDX 2
 
 static struct avs_state_s
 {
@@ -138,7 +138,7 @@ int get_status(char *buffer, struct kernel_param *kp) {
 		avs_state.current_tempr,avs_state.freq_idx,avs_state.vdd);
 
         for(i=0;i<avs_state.freq_cnt;i++) {
-                c+=sprintf(buffer+c,"%2d:%7d %d\n",i,avs_state.freq[i],avs_state.avs_v[avs_state.current_tempr*avs_state.freq_cnt+i]);
+                c+=sprintf(buffer+c,"%2d:%7d %d %d\n",i,avs_state.freq[i],avs_state.avs_v[avs_state.current_tempr*avs_state.freq_cnt+i],avs_state.flags[avs_state.current_tempr*avs_state.freq_cnt+i]);
         }
         return c;
 }
@@ -154,7 +154,7 @@ static void avs_update_voltage_table(short *vdd_table)
 	int cpu;
 	int vu;
 	int l2;
-	int i;
+	int i,j;
 	u32 cur_freq_idx;
 	short cur_voltage;
 
@@ -199,7 +199,7 @@ static void avs_update_voltage_table(short *vdd_table)
 		}
 
 	} else {
-		// if a good voltaage has been found just return
+		// if a good voltage has been found just return
 		if(avs_state.flags[avs_state.current_tempr*avs_state.freq_cnt+cur_freq_idx]==AVS_FOUND)
 			return;
 		// if all oscillators ask for down
@@ -207,15 +207,30 @@ static void avs_update_voltage_table(short *vdd_table)
 			if ((cur_voltage - VOLTAGE_STEP >= vdd_min) &&
 			    (cur_voltage <= vdd_table[cur_freq_idx])) {
 				vdd_table[cur_freq_idx] = cur_voltage - VOLTAGE_STEP;
-				AVSDEBUG("Voltage down for %d and lower levels\n",
-					cur_freq_idx);
+				AVSDEBUG("Voltage down to %d for %d\n", vdd_table[cur_freq_idx], cur_freq_idx);
 				/* clamp to this voltage for all lower levels */
 				for (i = 0; i < cur_freq_idx; i++) {
-					if (vdd_table[i] > vdd_table[cur_freq_idx])
+					if (vdd_table[i] > vdd_table[cur_freq_idx]) {
 						vdd_table[i] = vdd_table[cur_freq_idx];
+						AVSDEBUG("Clamp to %d for %d\n",vdd_table[i],i);
+					}
 				}
+				// clamp to this voltage for all lower temps (propagation delay increases with temp)
+				for (i = 0; i < avs_state.current_tempr; i++) {
+					if (avs_state.avs_v[i*avs_state.freq_cnt+cur_freq_idx]>vdd_table[cur_freq_idx]) {
+						avs_state.avs_v[i*avs_state.freq_cnt+cur_freq_idx]=vdd_table[cur_freq_idx];
+						AVSDEBUG("Clamp to %d for %d @ TEMP=%d\n",vdd_table[cur_freq_idx],cur_freq_idx,i);
+						for(j=0; j<cur_freq_idx; j++) {
+							if (avs_state.avs_v[i*avs_state.freq_cnt+j] > vdd_table[cur_freq_idx]) {
+								avs_state.avs_v[i*avs_state.freq_cnt+j] = vdd_table[cur_freq_idx];
+								AVSDEBUG("Clamp to %d for %d @ TEMP=%d\n",vdd_table[cur_freq_idx],j,i);
+							}
+						}
+					}
+				}
+
 			}
-		} else if ((cpu == 0) || (l2 == 0)) { // vu is not very reliable so only use cpu and l2 to see if a good voltage is found
+		} else if ((cpu == 0) && (l2 == 0)) { // vu is not very reliable so only use cpu and l2 to see if a good voltage is found
 			// increase the voltage slightly and mark as found
 			avs_state.flags[avs_state.current_tempr*avs_state.freq_cnt+cur_freq_idx]=AVS_FOUND;
 			vdd_table[cur_freq_idx] += VOLTAGE_STEP;
@@ -263,6 +278,7 @@ static int avs_set_target_voltage(int freq_idx, bool update_table)
 
 	int new_voltage = avs_get_target_voltage(freq_idx, update_table);
 	if (avs_state.vdd != new_voltage) {
+		msleep(10); // make sure vdd changes don't happen too often or just after resume.
 		do {
 			AVSDEBUG("AVS setting V to %d mV @%d\n",
 				new_voltage, freq_idx);
