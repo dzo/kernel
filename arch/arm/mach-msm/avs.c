@@ -34,7 +34,7 @@ struct mutex avs_lock;
 static int debug=0;
 module_param(debug, int, 00644);
 
-static int enabled=0;
+static int enabled=1;
 
 int avs_enabled(void) {
 	return enabled;
