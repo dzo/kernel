@@ -472,6 +472,20 @@ config MSM_CPU_FREQ_MIN
 
 endif # CPU_FREQ_MSM
 
+config MSM_AVS_ENABLED
+        bool "Enable AVS by default?"
+        default n
+        help
+          Enables AVS (Adaptive Voltage Scaling) by default
+          Can be overridden in sysfs
+
+config MSM_AVS_VDD_MIN
+        int "AVS vdd_min (mv)"
+        default 900
+        help
+          Values which make sense are 800-1000. Instability may occur at lower values
+          Can be overridden in sysfs
+
 config AXI_SCREEN_POLICY
         depends on ARCH_QSD8X50 || ARCH_MSM7X00A || ARCH_MSM7227 || ARCH_MSM7225
   depends on HAS_EARLYSUSPEND

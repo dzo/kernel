@@ -34,7 +34,11 @@ struct mutex avs_lock;
 static int debug=0;
 module_param(debug, int, 00644);
 
+#ifdef CONFIG_MSM_AVS_ENABLED
+static int enabled=1;
+#else
 static int enabled=0;
+#endif
 
 int avs_enabled(void) {
 	return enabled;
