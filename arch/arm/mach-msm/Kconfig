@@ -510,6 +510,11 @@ config MSM_QDSP6
 	help
 	  Enable support for qdsp6. This provides audio and video functionality.
 
+config MSM_QDSP6_CALLREC
+	bool "Call recording support"
+	depends on MSM_QDSP6
+	default n
+
 config MSM_QDSP5V2
 	tristate "QDSP5V2 support"
 	depends on ARCH_MSM7X30
