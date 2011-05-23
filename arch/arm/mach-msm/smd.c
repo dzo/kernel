@@ -110,11 +110,16 @@ static void smd_diag(void)
 
 void msm_pm_flush_console(void);
 
+void _debug_dump_sym(int,char *,int,int);
+
 /* call when SMSM_RESET flag is set in the A9's smsm_state */
 static void handle_modem_crash(void)
 {
+	char smem_log[1024];
 	pr_err("ARM9 has CRASHED\n");
 	smd_diag();
+	_debug_dump_sym(0,smem_log,1024,64);
+	pr_err("SMEM_LOG:\n%s\n",smem_log);
 	msm_pm_flush_console();
 
 	/* hard reboot if possible */

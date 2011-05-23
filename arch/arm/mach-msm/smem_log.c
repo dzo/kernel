@@ -1498,7 +1498,7 @@ static int _debug_dump(int log, char *buf, int max)
 	return i;
 }
 
-static int _debug_dump_sym(int log, char *buf, int max)
+int _debug_dump_sym(int log, char *buf, int max, int onlylast)
 {
 	unsigned int idx;
 	int orig_idx;
@@ -1542,6 +1542,12 @@ static int _debug_dump_sym(int log, char *buf, int max)
 
 	orig_idx = *inst[log].idx;
 	idx = orig_idx;
+
+	if(onlylast) { // only show the last entries in the log
+		idx = idx-onlylast;
+		if(idx<0)
+			idx=inst[log].num+idx;
+	}
 
 	while (1) {
 		idx++;
@@ -1939,7 +1945,7 @@ static int debug_dump(char *buf, int max)
 
 static int debug_dump_sym(char *buf, int max)
 {
-	return _debug_dump_sym(GEN, buf, max);
+	return _debug_dump_sym(GEN, buf, max, 0);
 }
 
 static int debug_dump_static(char *buf, int max)
@@ -1949,7 +1955,7 @@ static int debug_dump_static(char *buf, int max)
 
 static int debug_dump_static_sym(char *buf, int max)
 {
-	return _debug_dump_sym(STA, buf, max);
+	return _debug_dump_sym(STA, buf, max, 0);
 }
 
 static int debug_dump_power(char *buf, int max)
@@ -1959,7 +1965,7 @@ static int debug_dump_power(char *buf, int max)
 
 static int debug_dump_power_sym(char *buf, int max)
 {
-	return _debug_dump_sym(POW, buf, max);
+	return _debug_dump_sym(POW, buf, max, 0);
 }
 
 #define SMEM_LOG_ITEM_PRINT_SIZE 160
