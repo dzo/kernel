@@ -282,7 +282,6 @@ static int avs_set_target_voltage(int freq_idx, bool update_table)
 
 	int new_voltage = avs_get_target_voltage(freq_idx, update_table);
 	if (avs_state.vdd != new_voltage) {
-		msleep(10); // make sure vdd changes don't happen too often or just after resume.
 		do {
 			AVSDEBUG("AVS setting V to %d mV @%d\n",
 				new_voltage, freq_idx);
@@ -334,7 +333,7 @@ aaf_out:
 
 static struct delayed_work avs_work;
 static struct workqueue_struct  *kavs_wq;
-#define AVS_DELAY msecs_to_jiffies(50)
+#define AVS_DELAY msecs_to_jiffies(200)
 
 static void do_avs_timer(struct work_struct *work)
 {
