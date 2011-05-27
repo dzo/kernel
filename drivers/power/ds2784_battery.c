@@ -35,6 +35,7 @@
 #include <linux/mutex.h>
 #include <linux/ds2784_battery.h>
 
+
 #include "../w1/w1.h"
 #include "w1_ds2784.h"
 
@@ -87,8 +88,11 @@ struct battery_status {
  * gauge every FAST_POLL seconds.  If we're asleep and on battery
  * power, sample every SLOW_POLL seconds
  */
-#define FAST_POLL	(1 * 60)
-#define SLOW_POLL	(10 * 60)
+static int  FAST_POLL=(1 * 60);
+static int  SLOW_POLL=(12 * 60 * 60);
+
+module_param_named(fast_poll, FAST_POLL, int, 00644);
+module_param_named(slow_poll, SLOW_POLL, int, 00644);
 
 static DEFINE_MUTEX(battery_log_lock);
 static struct battery_status battery_log[BATTERY_LOG_MAX];
@@ -142,7 +146,7 @@ struct ds2784_device_info {
 
 	struct power_supply bat;
 	struct workqueue_struct *monitor_wqueue;
-	struct work_struct monitor_work;
+	struct delayed_work monitor_work;
 	struct alarm alarm;
 	struct wake_lock work_wake_lock;
 
@@ -584,14 +588,13 @@ static void ds2784_program_alarm(struct ds2784_device_info *di, int seconds)
 	ktime_t next;
 
 	next = ktime_add(di->last_poll, low_interval);
-
 	alarm_start_range(&di->alarm, next, ktime_add(next, slack));
 }
 
 static void ds2784_battery_work(struct work_struct *work)
 {
 	struct ds2784_device_info *di =
-		container_of(work, struct ds2784_device_info, monitor_work);
+		container_of(work, struct ds2784_device_info, monitor_work.work);
 	struct timespec ts;
 	unsigned long flags;
 
@@ -609,7 +612,8 @@ static void ds2784_battery_work(struct work_struct *work)
 	/* prevent suspend before starting the alarm */
 	local_irq_save(flags);
 	wake_unlock(&di->work_wake_lock);
-	ds2784_program_alarm(di, FAST_POLL);
+//	ds2784_program_alarm(di, FAST_POLL);
+	queue_delayed_work(di->monitor_wqueue, &di->monitor_work,HZ*FAST_POLL);
 	local_irq_restore(flags);
 }
 
@@ -618,7 +622,7 @@ static void ds2784_battery_alarm(struct alarm *alarm)
 	struct ds2784_device_info *di =
 		container_of(alarm, struct ds2784_device_info, alarm);
 	wake_lock(&di->work_wake_lock);
-	queue_work(di->monitor_wqueue, &di->monitor_work);
+	queue_work(di->monitor_wqueue, &di->monitor_work.work);
 }
 
 static void battery_ext_power_changed(struct power_supply *psy)
@@ -683,7 +687,7 @@ static int ds2784_battery_probe(struct platform_device *pdev)
 	if (rc)
 		goto fail_register;
 
-	INIT_WORK(&di->monitor_work, ds2784_battery_work);
+	INIT_DELAYED_WORK(&di->monitor_work, ds2784_battery_work);
 	di->monitor_wqueue = create_freezeable_workqueue(dev_name(&pdev->dev));
 
 	/* init to something sane */
@@ -698,7 +702,7 @@ static int ds2784_battery_probe(struct platform_device *pdev)
 	alarm_init(&di->alarm, ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP,
 			ds2784_battery_alarm);
 	wake_lock(&di->work_wake_lock);
-	queue_work(di->monitor_wqueue, &di->monitor_work);
+	queue_work(di->monitor_wqueue, &di->monitor_work.work);
 	return 0;
 
 fail_workqueue:
@@ -732,10 +736,12 @@ static int ds2784_resume(struct device *dev)
 	 * so, and move back to sampling every minute until
 	 * we suspend again.
 	 */
+
 	if (di->slow_poll) {
 		ds2784_program_alarm(di, FAST_POLL);
 		di->slow_poll = 0;
 	}
+	
 	return 0;
 }
 
